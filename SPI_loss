@@ -32,10 +32,11 @@ def structured_prior_injection_loss(model, x0, t, noise, betas, epoch, max_epoch
     skel_loss = compute_skeleton_loss(skel_pred, skel_gt)
 
     # Scheduled SPI weights (simplified)
+    # Total diffusion steps (default DDPM setting)
     T = 1000
     t_scaled = t.float() / T
-# Placeholder schedule (review-only): simplified linear mask.
-# Actual injection uses a dynamic schedule (see paper Sec 5.1, Eq. X)
+    # Placeholder schedule (review-only): simplified linear mask.
+    # Actual injection uses a dynamic schedule (see paper Sec 5.1, Eq. X)
     time_weight = 1.0 - t_scaled 
     epoch_weight = epoch / max_epochs  
 
