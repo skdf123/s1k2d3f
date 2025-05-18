@@ -1,0 +1,93 @@
+# models/unet.py (review-only)
+
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+def get_timestep_embedding(timesteps, embedding_dim):
+    half_dim = embedding_dim // 2
+    emb = math.log(10000) / (half_dim - 1)
+    emb = torch.exp(torch.arange(half_dim, dtype=torch.float32, device=timesteps.device) * -emb)
+    emb = timesteps.float().unsqueeze(1) * emb.unsqueeze(0)
+    emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
+    if embedding_dim % 2 == 1:
+        emb = F.pad(emb, (0,1,0,0))
+    return emb
+
+def nonlinearity(x):
+    return x * torch.sigmoid(x)
+
+def Normalize(in_channels):
+    return nn.GroupNorm(32, in_channels)
+
+class ResnetBlock(nn.Module):
+    def __init__(self, in_channels, out_channels=None, dropout=0.1, temb_channels=512):
+        super().__init__()
+        out_channels = out_channels or in_channels
+        self.norm1 = Normalize(in_channels)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, padding=1)
+        self.temb_proj = nn.Linear(temb_channels, out_channels)
+        self.norm2 = Normalize(out_channels)
+        self.dropout = nn.Dropout(dropout)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
+        self.skip = nn.Conv2d(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
+
+    def forward(self, x, temb):
+        h = self.conv1(nonlinearity(self.norm1(x)))
+        h = h + self.temb_proj(nonlinearity(temb))[:, :, None, None]
+        h = self.conv2(self.dropout(nonlinearity(self.norm2(h))))
+        return h + self.skip(x)
+
+class AttnBlock(nn.Module):
+    def __init__(self, in_channels):
+        super().__init__()
+        self.norm = Normalize(in_channels)
+        self.q = nn.Conv2d(in_channels, in_channels, 1)
+        self.k = nn.Conv2d(in_channels, in_channels, 1)
+        self.v = nn.Conv2d(in_channels, in_channels, 1)
+        self.proj_out = nn.Conv2d(in_channels, in_channels, 1)
+
+    def forward(self, x):
+        h = self.norm(x)
+        q, k, v = self.q(h), self.k(h), self.v(h)
+        b, c, h, w = q.shape
+        q, k, v = q.view(b, c, -1), k.view(b, c, -1), v.view(b, c, -1)
+        attn = torch.softmax(torch.bmm(q.permute(0,2,1), k) * (c**-0.5), dim=-1)
+        out = torch.bmm(v, attn.permute(0,2,1)).view(b, c, h, w)
+        return x + self.proj_out(out)
+
+class DiffusionUNet(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        ch = config.model.ch
+        self.temb_dim = ch * 4
+        self.in_channels = config.model.in_channels * 2 if config.data.conditional else config.model.in_channels
+        self.out_channels = config.model.out_ch
+
+        self.temb = nn.Sequential(
+            nn.Linear(ch, self.temb_dim),
+            nn.SiLU(),
+            nn.Linear(self.temb_dim, self.temb_dim)
+        )
+
+        self.down = nn.Sequential(
+            nn.Conv2d(self.in_channels, ch, 3, padding=1),
+            ResnetBlock(ch, ch, temb_channels=self.temb_dim)
+        )
+
+        self.mid = ResnetBlock(ch, ch, temb_channels=self.temb_dim)
+
+        self.up = nn.Sequential(
+            ResnetBlock(ch, ch, temb_channels=self.temb_dim),
+            nn.Conv2d(ch, self.out_channels, 3, padding=1)
+        )
+
+    def forward(self, x, t):
+        temb = get_timestep_embedding(t, self.config.model.ch)
+        temb = self.temb(temb)
+        h = self.down(x)
+        h = self.mid(h, temb)
+        h = self.up(h, temb)
+        return h
