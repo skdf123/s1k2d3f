@@ -1,4 +1,4 @@
-# spi_loss.py
+# spi_loss.py (review-only)
 
 import torch
 import torch.nn.functional as F
