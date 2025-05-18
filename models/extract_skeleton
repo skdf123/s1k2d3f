@@ -1,0 +1,19 @@
+# extract_skeleton.py (review-only)
+
+import torch
+import torch.nn.functional as F
+
+class SkeletonExtractor:
+    def __init__(self, model_path=None, device='cuda'):
+        self.device = device
+        print(f"[INFO] SkeletonExtractor initialized (pretrained weights are not released).")
+
+    def run_inference(self, x):
+        """
+        Placeholder for skeleton extraction (review-only version).
+        In actual implementation, this would return soft skeleton maps.
+        """
+        return torch.sigmoid(x.mean(dim=1, keepdim=True))  # fake structure map
+
+    def compute_mse_loss(self, skel_pred, skel_gt):
+        return F.mse_loss(skel_pred, skel_gt)
