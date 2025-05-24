@@ -35,4 +35,4 @@ sampling:
 
 optim:
   optimizer: "Adam"
-  lr: 1e-4
+  lr: selected via fine tunning
