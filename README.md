@@ -34,8 +34,7 @@ main/
 
 ## Note
 
-This repository is a **review-phase stub** designed to demonstrate structure and intent.  
-The full implementation will be made public upon paper acceptance.
+This repository contains a minimal, review-stage implementation to demonstrate the core design and intent of our method. The full implementation will be made publicly available upon paper acceptance.
 
 ---
 
